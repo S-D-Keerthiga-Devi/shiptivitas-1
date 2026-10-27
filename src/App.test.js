@@ -63,22 +63,24 @@ describe('Board component', () => {
     const card = backlogColumn.querySelector('.Card');
 
     // Test dropping into In Progress (should turn blue)
-    boardInstance.onDrop(card, inProgressColumn, backlogColumn, null);
-    expect(card.classList.contains('Card-blue')).toBe(true);
-    expect(card.classList.contains('Card-grey')).toBe(false);
-    expect(card.getAttribute('data-status')).toBe('in-progress');
+    boardInstance.updateClient(card, inProgressColumn, backlogColumn, null);
+    expect(boardInstance.state.clients.inProgress.length).toBe(1);
+    expect(boardInstance.state.clients.inProgress[0].status).toBe('in-progress');
+    const inProgressCard = inProgressColumn.querySelector('.Card');
+    expect(inProgressCard.classList.contains('Card-blue')).toBe(true);
 
     // Test dropping into Complete (should turn green)
-    boardInstance.onDrop(card, completeColumn, inProgressColumn, null);
-    expect(card.classList.contains('Card-green')).toBe(true);
-    expect(card.classList.contains('Card-blue')).toBe(false);
-    expect(card.getAttribute('data-status')).toBe('complete');
+    boardInstance.updateClient(inProgressCard, completeColumn, inProgressColumn, null);
+    expect(boardInstance.state.clients.complete.length).toBe(1);
+    expect(boardInstance.state.clients.complete[0].status).toBe('complete');
+    const completeCard = completeColumn.querySelector('.Card');
+    expect(completeCard.classList.contains('Card-green')).toBe(true);
 
     // Test dropping back into Backlog (should turn grey)
-    boardInstance.onDrop(card, backlogColumn, completeColumn, null);
-    expect(card.classList.contains('Card-grey')).toBe(true);
-    expect(card.classList.contains('Card-green')).toBe(false);
-    expect(card.getAttribute('data-status')).toBe('backlog');
+    boardInstance.updateClient(completeCard, backlogColumn, completeColumn, null);
+    expect(boardInstance.state.clients.backlog.length).toBe(20);
+    const movedCardBack = backlogColumn.querySelector('.Card');
+    expect(movedCardBack.classList.contains('Card-grey')).toBe(true);
 
     ReactDOM.unmountComponentAtNode(div);
     document.body.removeChild(div);
