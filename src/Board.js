@@ -29,6 +29,27 @@ export default class Board extends React.Component {
       this.swimlanes.complete.current,
     ]);
     this.drake.on('drop', (el, target, source, sibling) => this.updateClient(el, target, source, sibling));
+
+    this.fetchClients();
+  }
+
+  fetchClients() {
+    if (typeof fetch !== 'undefined') {
+      fetch('http://localhost:3001/api/v1/clients')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            this.setState({
+              clients: {
+                backlog: data.filter(c => !c.status || c.status === 'backlog').sort((a, b) => a.priority - b.priority),
+                inProgress: data.filter(c => c.status === 'in-progress').sort((a, b) => a.priority - b.priority),
+                complete: data.filter(c => c.status === 'complete').sort((a, b) => a.priority - b.priority),
+              }
+            });
+          }
+        })
+        .catch(err => console.error('Failed to fetch clients:', err));
+    }
   }
 
   componentWillUnmount() {
@@ -41,6 +62,8 @@ export default class Board extends React.Component {
   updateClient(el, target, _, sibling) {
     // Reverting DOM changes from Dragula
     this.drake.cancel(true);
+
+    if (!target) return;
 
     // Find out which swimlane the Card was moved to
     let targetSwimlane = 'backlog';
@@ -56,27 +79,64 @@ export default class Board extends React.Component {
       ...this.state.clients.inProgress,
       ...this.state.clients.complete,
     ];
-    const clientThatMoved = clientsList.find(client => client.id === el.dataset.id);
+    const clientThatMoved = clientsList.find(client => String(client.id) === String(el.dataset.id));
+    if (!clientThatMoved) return;
+
     const clientThatMovedClone = {
       ...clientThatMoved,
       status: targetSwimlane,
     };
 
     // Remove ClientThatMoved from the clientsList
-    const updatedClients = clientsList.filter(client => client.id !== clientThatMovedClone.id);
+    const updatedClients = clientsList.filter(client => String(client.id) !== String(clientThatMovedClone.id));
 
     // Place ClientThatMoved just before the sibling client, keeping the order
-    const index = updatedClients.findIndex(client => sibling && client.id === sibling.dataset.id);
+    const index = updatedClients.findIndex(client => sibling && String(client.id) === String(sibling.dataset.id));
     updatedClients.splice(index === -1 ? updatedClients.length : index , 0, clientThatMovedClone);
+
+    const newBacklog = updatedClients.filter(client => !client.status || client.status === 'backlog');
+    const newInProgress = updatedClients.filter(client => client.status && client.status === 'in-progress');
+    const newComplete = updatedClients.filter(client => client.status && client.status === 'complete');
 
     // Update React state to reflect changes
     this.setState({
       clients: {
-        backlog: updatedClients.filter(client => !client.status || client.status === 'backlog'),
-        inProgress: updatedClients.filter(client => client.status && client.status === 'in-progress'),
-        complete: updatedClients.filter(client => client.status && client.status === 'complete'),
+        backlog: newBacklog,
+        inProgress: newInProgress,
+        complete: newComplete,
       }
     });
+
+    const targetList = targetSwimlane === 'backlog'
+      ? newBacklog
+      : (targetSwimlane === 'in-progress' ? newInProgress : newComplete);
+    const newPriority = targetList.findIndex(client => String(client.id) === String(clientThatMovedClone.id)) + 1;
+
+    if (typeof fetch !== 'undefined') {
+      fetch(`http://localhost:3001/api/v1/clients/${clientThatMovedClone.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: targetSwimlane,
+          priority: newPriority,
+        }),
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          this.setState({
+            clients: {
+              backlog: data.filter(c => !c.status || c.status === 'backlog').sort((a, b) => a.priority - b.priority),
+              inProgress: data.filter(c => c.status === 'in-progress').sort((a, b) => a.priority - b.priority),
+              complete: data.filter(c => c.status === 'complete').sort((a, b) => a.priority - b.priority),
+            }
+          });
+        }
+      })
+      .catch(err => console.error('Failed to update client:', err));
+    }
   }
 
   getClients() {
